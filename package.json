@@ -268,13 +268,13 @@
     "@azure/msal-node": "^7.1.1"
   },
   "author": "Nikolas Psyllou",
-  "homepage": "https://github.com/Nikolas2610/branch-lens#readme",
+  "homepage": "https://github.com/Nikolas2610/branch-weave#readme",
   "bugs": {
-    "url": "https://github.com/Nikolas2610/branch-lens/issues"
+    "url": "https://github.com/Nikolas2610/branch-weave/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Nikolas2610/branch-lens.git"
+    "url": "https://github.com/Nikolas2610/branch-weave.git"
   },
   "keywords": [
     "git",
