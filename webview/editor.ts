@@ -2,6 +2,7 @@ import * as monaco from "monaco-editor/editor/editor.api.js";
 import "monaco-editor/basic-languages/monaco.contribution.js";
 import { iconButton, toolbarGroup, type ToolbarIcon } from "./toolbar";
 import { normalizeThemeColor } from "./colors";
+import { createWorkflow } from "./workflow";
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void };
 const api = acquireVsCodeApi();
 (globalThis as any).MonacoEnvironment = {
@@ -15,6 +16,9 @@ let updating = false;
 let currentHunk = 0;
 let focus: "left" | "right" = "right";
 let key = "";
+// Monaco can emit nested auto-close events for the same final model text.
+// Revisions track distinct outgoing snapshots, not editor event counts.
+const outgoingText: Partial<Record<"left" | "right", string>> = {};
 const diff = monaco.editor.createDiffEditor(el("editor"), {
   automaticLayout: true,
   renderSideBySide: true,
@@ -196,6 +200,39 @@ for (const side of ["left", "right"] as const) {
     side,
   );
 }
+const workflowRoot =
+  document.getElementById("workflow-root") || document.createElement("div");
+if (!workflowRoot.isConnected) el("notice").before(workflowRoot);
+const workflow = createWorkflow(
+  workflowRoot,
+  el("navigation"),
+  dispatch,
+  (side, line) => {
+    const editor =
+      side === "left" ? diff.getOriginalEditor() : diff.getModifiedEditor();
+    const safeLine = Math.max(
+      1,
+      Math.min(editor.getModel()?.getLineCount() || 1, line),
+    );
+    editor.revealLineInCenter(safeLine);
+    editor.setPosition({ lineNumber: safeLine, column: 1 });
+    editor.focus();
+  },
+);
+function updateWorkflow() {
+  if (state) workflow.update(state, currentHunk, acknowledged !== version);
+}
+function displayOptions() {
+  diff.updateOptions({
+    hideUnchangedRegions: {
+      enabled: !!state?.focusMode,
+      contextLineCount: 3,
+      minimumLineCount: 5,
+      revealLineCount: 10,
+    },
+    ignoreTrimWhitespace: !!state?.ignoreWhitespace,
+  });
+}
 function theme() {
   const light = document.body.classList.contains("vscode-light");
   const hc = document.body.classList.contains("vscode-high-contrast");
@@ -248,6 +285,32 @@ function theme() {
   });
   monaco.editor.setTheme("branchlens");
 }
+/** Presentation only: authoritative host hunk coordinates remain unchanged. */
+function whitespaceOnlyHunk(hunk: {
+  leftStart: number;
+  leftCount: number;
+  rightStart: number;
+  rightCount: number;
+}): boolean {
+  if (!models || hunk.leftCount === 0 || hunk.leftCount !== hunk.rightCount)
+    return false;
+  for (let offset = 0; offset < hunk.leftCount; offset++) {
+    const leftLine = hunk.leftStart + offset + 1;
+    const rightLine = hunk.rightStart + offset + 1;
+    if (
+      leftLine > models.left.getLineCount() ||
+      rightLine > models.right.getLineCount()
+    )
+      return false;
+    const trim = (model: monaco.editor.ITextModel, line: number) =>
+      model.getLineContent(line).replace(/^[ \t]+|[ \t]+$/g, "") +
+      // A changed final newline or EOL is not leading/trailing spaces or tabs.
+      (line < model.getLineCount() ? model.getEOL() : "");
+    if (trim(models.left, leftLine) !== trim(models.right, rightLine))
+      return false;
+  }
+  return true;
+}
 /** Only public model decorations: no Monaco-owned DOM is inspected or modified. */
 function decorateHunks() {
   for (const side of ["left", "right"] as const) {
@@ -255,6 +318,7 @@ function decorateHunks() {
     const model = models?.[side];
     if (model && state?.highlight !== false && acknowledged === version) {
       for (const hunk of state?.hunks || []) {
+        if (state.ignoreWhitespace && whitespaceOnlyHunk(hunk)) continue;
         const start = hunk[side + "Start"] as number;
         const count = hunk[side + "Count"] as number;
         const color = side === "left" ? "reference" : "working";
@@ -345,14 +409,23 @@ function language(path: string) {
   );
 }
 function updatePosition() {
+  updateWorkflow();
+  const current = state?.hunks?.[currentHunk];
+  const hidden =
+    state?.ignoreWhitespace &&
+    current &&
+    acknowledged === version &&
+    whitespaceOnlyHunk(current)
+      ? " · whitespace-only section hidden"
+      : "";
   if (state?.filePosition) {
     el("position").textContent =
       state.filePosition +
-      ` · Change ${state.hunks?.length ? currentHunk + 1 : 0} of ${state.hunks?.length || 0}`;
+      ` · Change ${state.hunks?.length ? currentHunk + 1 : 0} of ${state.hunks?.length || 0}${hidden}`;
     return;
   }
   el("position").textContent =
-    `File ${(state?.index ?? 0) + 1} of ${state?.total ?? 0} · Change ${state?.hunks?.length ? currentHunk + 1 : 0} of ${state?.hunks?.length ?? 0}`;
+    `File ${(state?.index ?? 0) + 1} of ${state?.total ?? 0} · Change ${state?.hunks?.length ? currentHunk + 1 : 0} of ${state?.hunks?.length ?? 0}${hidden}`;
 }
 function navigateHunk(delta: number) {
   const hunks = state?.hunks || [];
@@ -363,7 +436,61 @@ function navigateHunk(delta: number) {
   diff.getModifiedEditor().revealLineInCenter(Math.max(1, h.rightStart + 1));
   updatePosition();
 }
+function applyNavigation(target: {
+  hunk?: number;
+  side?: "left" | "right";
+  line?: number;
+}) {
+  if (
+    Number.isInteger(target.hunk) &&
+    (target.hunk ?? -1) >= 0 &&
+    (target.hunk ?? 0) < (state?.hunks?.length || 0)
+  ) {
+    currentHunk = target.hunk!;
+    navigateHunk(0);
+  }
+  if (Number.isInteger(target.line) && (target.line ?? 0) > 0) {
+    const editor =
+      target.side === "left"
+        ? diff.getOriginalEditor()
+        : diff.getModifiedEditor();
+    const line = Math.min(target.line!, editor.getModel()?.getLineCount() || 1);
+    editor.revealLineInCenter(line);
+    editor.setPosition({ lineNumber: line, column: 1 });
+    editor.focus();
+  }
+}
 function dispatch(action: string, value?: unknown) {
+  if (action === "reviewHunk" && value === undefined) {
+    if (!state?.review || !state.hunks?.length) return;
+    value = {
+      index: currentHunk,
+      reviewed: !state.review.reviewedHunks.includes(currentHunk),
+    };
+  }
+  if (action === "navigate" && value && typeof value === "object") {
+    applyNavigation(
+      value as { hunk?: number; side?: "left" | "right"; line?: number },
+    );
+    return;
+  }
+  if (
+    [
+      "reviewFile",
+      "reviewHunk",
+      "addNote",
+      "deleteNote",
+      "stageHunk",
+      "unstageHunk",
+      "nextUnreviewed",
+      "exportReview",
+    ].includes(action) &&
+    acknowledged !== version
+  ) {
+    el("notice").textContent =
+      "Wait for the draft change mapping to update, then retry.";
+    return;
+  }
   if (action === "focusLeft" || action === "focusRight") {
     (action === "focusLeft"
       ? diff.getOriginalEditor()
@@ -441,6 +568,12 @@ for (const [side, editor] of [
   });
   editor.onDidChangeModelContent(() => {
     if (updating || !models) return;
+    const text = models[side].getValue(
+      monaco.editor.EndOfLinePreference.TextDefined,
+      true,
+    );
+    if (text === outgoingText[side]) return;
+    outgoingText[side] = text;
     api.postMessage({
       type: "draft",
       action: "edit",
@@ -448,10 +581,7 @@ for (const [side, editor] of [
       sessionId: state?.sessionId,
       index: state?.index,
       fileKey: state?.fileKey,
-      text: models[side].getValue(
-        monaco.editor.EndOfLinePreference.TextDefined,
-        true,
-      ),
+      text,
       version,
     });
     version++;
@@ -461,6 +591,7 @@ for (const [side, editor] of [
       if (side === "left") state.leftDirty = true;
       else state.rightUnsaved = true;
       updateLabels();
+      updateWorkflow();
     }
   });
 }
@@ -474,7 +605,21 @@ window.addEventListener(
       dispatch("save");
       return;
     }
-    if (mod && e.key.toLowerCase() === "z") {
+    if (
+      (e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLSelectElement) &&
+      !mod
+    )
+      return;
+    if (
+      mod &&
+      e.key.toLowerCase() === "z" &&
+      !(
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLInputElement
+      )
+    ) {
       e.preventDefault();
       e.stopPropagation();
       dispatch(e.shiftKey ? "redo" : "undo");
@@ -546,6 +691,17 @@ window.addEventListener("message", (event) => {
     if (state) {
       state.hunks = msg.hunks;
       state.dirty = msg.dirty;
+      for (const field of [
+        "review",
+        "staging",
+        "impact",
+        "focusMode",
+        "ignoreWhitespace",
+      ]) {
+        if (Object.prototype.hasOwnProperty.call(msg, field))
+          state[field] = msg[field];
+      }
+      displayOptions();
       if (typeof msg.leftDirty === "boolean") state.leftDirty = msg.leftDirty;
       if (typeof msg.rightUnsaved === "boolean")
         state.rightUnsaved = msg.rightUnsaved;
@@ -600,6 +756,12 @@ window.addEventListener("message", (event) => {
         models![side].setValue(msg[side].text);
     }
   }
+  for (const side of ["left", "right"] as const) {
+    outgoingText[side] = models![side].getValue(
+      monaco.editor.EndOfLinePreference.TextDefined,
+      true,
+    );
+  }
   updating = false;
   diff.updateOptions({
     readOnly: !!msg.unsupported,
@@ -608,11 +770,9 @@ window.addEventListener("message", (event) => {
   diff
     .getOriginalEditor()
     .updateOptions({ ariaLabel: "Reference branch draft, editable" });
-  diff
-    .getModifiedEditor()
-    .updateOptions({
-      ariaLabel: "Current branch working file, editable; Save writes to disk",
-    });
+  diff.getModifiedEditor().updateOptions({
+    ariaLabel: "Current branch working file, editable; Save writes to disk",
+  });
   el("file-label").textContent = msg.path;
   updateLabels();
   el("notice").textContent = msg.unsupported || "";
@@ -622,8 +782,10 @@ window.addEventListener("message", (event) => {
       b.disabled = !!msg.unsupported;
     });
   theme();
+  displayOptions();
   updatePosition();
   decorateHunks();
+  if (msg.pendingNavigation) applyNavigation(msg.pendingNavigation);
 });
 new MutationObserver(theme).observe(document.body, {
   attributes: true,

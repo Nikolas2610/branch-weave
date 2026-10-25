@@ -1,8 +1,8 @@
 {
   "name": "branch-lens",
   "displayName": "BranchWeave",
-  "description": "Compare a reference branch with your current working files, review changes, and copy lines or sections in VS Code.",
-  "version": "0.2.0",
+  "description": "Compare branches, review and annotate changes, stage individual sections, and inspect changed code with candidate tests.",
+  "version": "0.3.0",
   "publisher": "Nikolas2610",
   "license": "MIT",
   "engines": {
@@ -28,7 +28,8 @@
   },
   "dependencies": {
     "diff": "^8.0.2",
-    "monaco-editor": "^0.57.0"
+    "monaco-editor": "^0.57.0",
+    "typescript": "^5.9.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
@@ -40,7 +41,6 @@
     "eslint": "^9.0.0",
     "prettier": "^3.9.10",
     "tsx": "^4.20.0",
-    "typescript": "^5.9.0",
     "typescript-eslint": "^8.0.0",
     "ovsx": "1.3.0"
   },
@@ -164,6 +164,62 @@
       {
         "command": "branchlens.save",
         "title": "BranchWeave: Save Current Working File"
+      },
+      {
+        "command": "branchlens.reviewFile",
+        "title": "BranchWeave: Toggle File Reviewed"
+      },
+      {
+        "command": "branchlens.reviewHunk",
+        "title": "BranchWeave: Toggle Section Reviewed"
+      },
+      {
+        "command": "branchlens.nextUnreviewed",
+        "title": "BranchWeave: Next Unreviewed Change"
+      },
+      {
+        "command": "branchlens.addNote",
+        "title": "BranchWeave: Add Review Note"
+      },
+      {
+        "command": "branchlens.deleteNote",
+        "title": "BranchWeave: Delete Review Note"
+      },
+      {
+        "command": "branchlens.exportReview",
+        "title": "BranchWeave: Export Review as Markdown"
+      },
+      {
+        "command": "branchlens.focusMode",
+        "title": "BranchWeave: Toggle Focus Mode"
+      },
+      {
+        "command": "branchlens.ignoreWhitespace",
+        "title": "BranchWeave: Toggle Ignore Trim Whitespace"
+      },
+      {
+        "command": "branchlens.savePreset",
+        "title": "BranchWeave: Save Comparison Preset"
+      },
+      {
+        "command": "branchlens.loadPreset",
+        "title": "BranchWeave: Load Comparison Preset"
+      },
+      {
+        "command": "branchlens.deletePreset",
+        "title": "BranchWeave: Delete Comparison Preset"
+      },
+      {
+        "command": "branchlens.stageHunk",
+        "title": "BranchWeave: Stage Change Section"
+      },
+      {
+        "command": "branchlens.unstageHunk",
+        "title": "BranchWeave: Unstage Change Section"
+      },
+      {
+        "command": "branchlens.openRelatedTest",
+        "title": "BranchWeave: Open Candidate Related Test"
       }
     ],
     "keybindings": [

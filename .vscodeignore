@@ -19,5 +19,7 @@ dist/*.map
 docs/DEVELOPMENT.md
 docs/RELEASING.md
 docs/DELIVERY.md
+docs/REVIEW-WORKFLOW-DELIVERY.md
 docs/*verification.md
 AGENTS.md
+docs/evidence/workflow-before-fix-*.png

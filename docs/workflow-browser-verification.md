@@ -1,0 +1,43 @@
+# Review workflow browser verification
+
+Completed 2026-10-26. All six workflow UI checks passed after two browser-discovered defects were fixed and retested. Desktop: **1440×900**. Narrow: **600×800**. Routes below were served from `http://127.0.0.1:58217` in a separate headed Chrome session driven by Playwright CLI.
+
+Tool discovery found no interactive Codex Browser or Chrome automation tool. The isolated fallback used production HTML from `src/webview.ts`, production `dist` assets, real `DraftPair`, `ReviewStore`, `PresetStore`, `validateMessage`, and `analyzeImpact` through `tests/browser/workflow-harness.ts`. Browser QA edited no application code.
+
+## Observed checks
+
+All six features were exercised at **both viewports**. Additional Undo/Redo regression coverage was desktop; no-match filter coverage and the final serialized-note/console check were narrow. Passing describes the rendered UI and the stated harness boundary, not native Git or VS Code effects.
+
+| Criterion | Route | Steps | Observed result |
+| --- | --- | --- | --- |
+| Review progress | `/editor?fresh=1`, `/files` | Review section 1, mark file reviewed, inspect sidebar and Refresh. | **Passed.** 0/3→1/3 section count; file mark selects all three; toolbar/sidebar show 1/4 files reviewed; file row gains check mark and reviewed accessible name. Marks survive real store serialize/reconstruct Refresh. |
+| Next unreviewed | `/editor`, `/files` | Review section 1, click Next unreviewed change; mark file, repeat; use sidebar Next unreviewed. | **Passed.** First target is Change 2 of 3. After file review, editor opens docs/review.md / File 2 of 4 / Change 1 of 1; sidebar selects that unreviewed file. |
+| Content-bound invalidation | `/editor` | Mark file, replace actual right-editor text; type `export const amount = () => 3;`; insert/backspace; toolbar Undo/Redo. | **Passed after fix.** File review invalidates while unaffected section marks remain. Note gains anchor changed. Controls settle without errors/pending stall. Exact arrow typing reaches correct authoritative text with zero consecutive duplicate edit snapshots. |
+| Notes and stale anchors | `/editor`, `/files` | Add file/section notes; edit anchor; delete note; add another, visit files, Refresh, return. | **Passed.** Literal `<safe>` renders as text; stale marker appears; selected note deletes. Survives serialized refresh note remains after real store reconstruction. Empty submission starts disabled. |
+| Markdown export | `/editor` | Export after notes/edits; inspect bridge and real exporter output. | **Passed at harness boundary.** Current file/session/version dispatched; Markdown contains branch names, file/section counts, note text and anchor-changed metadata. Boundary feedback renders. Native dialog/file creation is outside harness. |
+| Comparison presets | `/compare` | Set options/filter/list state; save name; change settings; load; Refresh; delete. | **Passed.** Desktop preset restores reference, upstream=true, highlight=false, flat=true, focus=true, ignoreWhitespace=true, filter=example. Narrow save/load/delete works too. Preset survives serialization Refresh. Current branch stays feature/current. |
+| Filters and layout | `/files` | Filter docs, example, no-such-file; toggle list; return after preset load. | **Passed.** Matching rows update; No matching changed files appears for empty results. Tree/list layout changes; preset restores filter. Narrow document width stays 600 CSS pixels. |
+| Focus regions | `/editor` | Enable focus on fresh comparison, disable/re-enable. | **Passed.** Both editors visibly show 70 hidden lines; OFF removes hidden-region widgets, ON restores them. Previously user-revealed regions can stay expanded during navigation; fresh-model and toggle checks establish real collapse. |
+| Trim whitespace | `/editor` | Navigate whitespace-only section 3, line 81; toggle ON/OFF; inspect genuine edits/index. | **Passed after fix.** Right custom islands 3→2→3; line81 loses trim-only fill/inline emphasis on ON, genuine greet/amount edits stay highlighted. Position explicitly says whitespace-only section hidden. Exact review mapping stays 3 hunks and index list/token unchanged. |
+| Stage/unstage | `/editor?fixture=0&scenario=` | Expand index preview; stage; expand staged preview; unstage. | **Passed at fixture boundary.** Unsaved buffer hint appears after editing. Lists move 1/0→0/1→1/0. UI posts independent index ID 17 for stage and ID 29 for unstage, with distinct changing 64-hex tokens, not comparison hunk IDs 0–2. |
+| Stale index | `/editor?fixture=0&scenario=stale` | Stage, inspect rejection, expand refreshed section, retry. | **Passed at fixture boundary.** Index changed notice appears; first attempt leaves list unchanged; retry uses replacement token and moves section staged. |
+| Error/empty/unavailable | `/editor?fixture=0&scenario=error`, `?fixture=2&scenario=`, `?fixture=3` | Inspect lock error/preview, empty index, binary file. | **Passed.** Error visible and operation disabled; empty lists say No unstaged/staged sections with zero operation buttons; binary says index/symbol analysis unavailable and cannot edit as text; transfer disabled. |
+| Symbols/tests | `/editor?fixture=0`, `?fixture=1` | Click function/arrow, candidate tests, Markdown file-level fallback. | **Passed at navigation boundary.** Real parser lists function/arrow locations and filename/import evidence. Jumps focus working editor and bring target area/caret into view. Test actions carry exact safe paths; bridge records tests/consumer.spec.ts and tests/example.test.ts. Advisory suggestions text and no-candidate state render. Unsupported Markdown groups at file level and jumps safely. |
+| Responsive access | All three routes | Repeat controls at 600×800 with expanded panels/errors. | **Passed.** Controls accessible through panel scrolling, editor usable, no page horizontal overflow. Final checked route console: zero errors/warnings. |
+
+## Defects found and retested
+
+1. **Duplicate Monaco edit events stalled acknowledgement.** Select a right-editor line and type `export const amount = () => 3;`. Two identical full-text snapshots around auto-closing parentheses advanced webview revision twice but DraftPair once, leaving Updating review indefinitely. UI owner added per-side outgoing text deduplication. Single insertion, exact arrow typing, insert/backspace and Undo/Redo now settle; zero consecutive duplicate snapshots.
+2. **Trim-only custom decoration survived the toggle.** Enable Ignore trim whitespace in fixture0; line81 stayed red/green after Monaco hid its whitespace diff. UI owner now suppresses trim-only presentation decorations while keeping host mapping. ON/OFF retested at both viewports with genuine edits retained. Before-fix screenshot: `evidence/workflow-before-fix-whitespace.png`.
+
+## Evidence and boundary
+
+Passing captures: `evidence/workflow-desktop-review.png`, `workflow-desktop-invalidation.png`, `workflow-desktop-presets.png`, `workflow-desktop-index-error.png`, `workflow-desktop-whitespace-fixed.png`; and `workflow-narrow-review.png`, `workflow-narrow-presets.png`, `workflow-narrow-panels.png`, `workflow-narrow-sidebar.png`, `workflow-narrow-index-error.png`, `workflow-narrow-whitespace-fixed.png`. Focus/whitespace and narrow panel screenshots were visually inspected.
+
+**Unverified by this browser harness:** real Git index/disk mutation and unrelated staged preservation; VS Code document lifetime, native save/open dialogs, checkout protection; extension restart/repository-scoped persistence. Harness deliberately simulates index sections and test-opening effects. Persistence here means real store serialize/reconstruct within the harness. Main-agent native host and actual Git tests supply separate evidence; this report claims no browser proof of those effects.
+
+## Cleanup
+
+Isolated browser session `workflow-qa` closed. Temporary harness **stopped**, PID 32388, former port 58217, registry record **93d258df-efc2-402a-b5f2-a8c9b93ebfb3**, verified stopped at `2026-10-26T01:12:33+02:00`. Initial fixture-correction record `0a540bbe-fddc-423a-8cd1-619591798d1d` also stopped before replacement. Both use verified Windows boot `2026-10-14T17:21:51.5+03:00`. No QA server remains running. Logs/CLI snapshots reside in ignored `.test-host/browser-workflow/`; no credentials or user's browser profile used.
+
+Repeat after production build: launch `tests/browser/workflow-browser-qa.server.ps1 -Mode start` with registry/CIM access; use emitted loopback URL in a fresh isolated browser. Stop owned identity-checked process with `-Mode stop -RecordId <returned UUID>`.

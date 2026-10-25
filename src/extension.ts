@@ -12,6 +12,17 @@ import {
   LiveConflict,
 } from "./live";
 import { html } from "./webview";
+import { safeApplyPath } from "./applyPlan";
+import {
+  ReviewStore,
+  PresetStore,
+  snapshotFingerprint,
+  exportReviewMarkdown,
+  type ReviewSnapshot,
+} from "./review";
+import { readStagingState, applyStagingHunk } from "./staging";
+import { analyzeImpact } from "./impact";
+import type { ReviewView, StagingView, ImpactView } from "./workflowTypes";
 import {
   actions,
   Action,
@@ -25,6 +36,9 @@ interface Settings {
   includeUpstream: boolean;
   highlight: boolean;
   flat: boolean;
+  focusMode: boolean;
+  ignoreWhitespace: boolean;
+  filter: string;
 }
 interface Saved {
   session: ComparisonSession;
@@ -72,6 +86,9 @@ class BranchLens implements vscode.Disposable {
     includeUpstream: false,
     highlight: true,
     flat: false,
+    focusMode: false,
+    ignoreWhitespace: false,
+    filter: "",
   };
   private generation = 0;
   private fileGeneration = 0;
@@ -83,6 +100,22 @@ class BranchLens implements vscode.Disposable {
   private recoveryTimer?: ReturnType<typeof setTimeout>;
   private writing = 0;
   private initialization: Promise<void>;
+  private reviews = new ReviewStore();
+  private presets = new PresetStore();
+  private reviewScope = "";
+  private reviewedFiles = new Set<number>();
+  private workflowTimer?: ReturnType<typeof setTimeout>;
+  private pendingNavigation?: {
+    hunk?: number;
+    side?: "left" | "right";
+    line?: number;
+  };
+  private relatedTests = new Set<string>();
+  private testCache?: {
+    root: string;
+    at: number;
+    files: { path: string; text: string }[];
+  };
   constructor(private context: vscode.ExtensionContext) {
     for (const kind of ["compare", "files"] as const)
       this.disposables.push(
@@ -223,6 +256,34 @@ class BranchLens implements vscode.Disposable {
               : m.index !== this.doc.active))
         )
           return;
+        if (
+          [
+            "reviewFile",
+            "reviewHunk",
+            "addNote",
+            "deleteNote",
+            "stageHunk",
+            "unstageHunk",
+          ].includes(m.action)
+        ) {
+          const active = await this.pair();
+          if (
+            !(active instanceof DraftPair) ||
+            !this.doc ||
+            !matchesDraftTarget(
+              m,
+              this.doc.session.id,
+              this.doc.active,
+              active.version,
+              this.fileKey(active),
+            )
+          ) {
+            await this.showFile();
+            throw new Error(
+              "The file changed. Retry using the updated review or staging selection.",
+            );
+          }
+        }
         await this.action(m.action, m.value);
       } else await this.edit(m);
     });
@@ -273,9 +334,17 @@ class BranchLens implements vscode.Disposable {
       includeUpstream: false,
       highlight: true,
       flat: false,
+      focusMode: false,
+      ignoreWhitespace: false,
+      filter: "",
       ...saved,
     };
     this.settings.right = current;
+    this.presets = new PresetStore(
+      this.context.workspaceState.get("presets:" + repo.root),
+    );
+    this.testCache = undefined;
+    this.relatedTests.clear();
     this.doc = undefined;
     const recovery =
       this.context.workspaceState.get<string>(
@@ -294,6 +363,8 @@ class BranchLens implements vscode.Disposable {
         /* Old or unavailable recovery data does not block a fresh comparison. */
       }
     this.error = "";
+    await this.loadReviewScope();
+    if (this.doc) await this.refreshReviewProgress();
     this.updateSidebar();
   }
   private async persist() {
@@ -328,6 +399,7 @@ class BranchLens implements vscode.Disposable {
     clearTimeout(this.recoveryTimer);
     await this.queue;
     await this.persistSession();
+    await this.persistReview();
   }
   private updateSidebar() {
     for (const w of this.sidebars)
@@ -345,6 +417,13 @@ class BranchLens implements vscode.Disposable {
         loading: this.loading,
         error: this.error,
         rightWorkingTree: true,
+        currentBranch: this.settings.right,
+        presets: this.presets.list(),
+        reviewedFiles: [...this.reviewedFiles],
+        reviewProgress: {
+          reviewed: this.reviewedFiles.size,
+          total: this.doc?.session.files.length || 0,
+        },
       });
   }
   private async canReplace() {
@@ -433,6 +512,7 @@ class BranchLens implements vscode.Disposable {
     if (!this.repository || !this.settings.left)
       throw new Error("Select a repository and reference branch first.");
     if (!automatic && !(await this.canReplace())) return false;
+    if (!automatic) this.testCache = undefined;
     const token = ++this.generation;
     this.fileGeneration++;
     this.loading = true;
@@ -499,6 +579,8 @@ class BranchLens implements vscode.Disposable {
         pinned,
       );
       this.settings.right = session.rightRef;
+      await this.loadReviewScope();
+      await this.refreshReviewProgress();
       await this.persist();
       await this.persistSession();
       if (!automatic) this.ensurePanel();
@@ -633,6 +715,176 @@ class BranchLens implements vscode.Disposable {
       ? JSON.stringify([pair.original.left.path, pair.original.right.path])
       : undefined;
   }
+  private async loadReviewScope() {
+    if (!this.repository) return;
+    const session =
+      this.doc?.session.root === this.repository.root
+        ? this.doc.session
+        : undefined;
+    const scope =
+      "review:" +
+      JSON.stringify([
+        this.repository.root,
+        session?.rightRef ?? this.settings.right,
+        session?.leftRef ?? this.settings.left,
+        session?.includeUpstream ?? this.settings.includeUpstream,
+      ]);
+    if (scope === this.reviewScope) return;
+    await this.persistReview();
+    this.reviewScope = scope;
+    this.reviews = new ReviewStore(this.context.workspaceState.get(scope));
+    this.reviewedFiles.clear();
+  }
+  private async persistReview() {
+    if (this.reviewScope)
+      await this.context.workspaceState.update(
+        this.reviewScope,
+        this.reviews.serialize(),
+      );
+  }
+  private reviewKey(index: number): string {
+    const d = this.doc!,
+      pair = d.drafts.get(index),
+      file = d.session.files[index] || d.pinned;
+    return pair
+      ? this.fileKey(pair)!
+      : JSON.stringify([file.oldPath, file.newPath]);
+  }
+  private snapshot(pair: DraftPair): ReviewSnapshot {
+    return { ...pair.current, hunks: pair.hunks() };
+  }
+  private async snapshotAt(index: number): Promise<ReviewSnapshot | undefined> {
+    const d = this.doc,
+      repo = this.repository;
+    if (!d || !repo) return;
+    const file =
+      d.session.files[index] || (index === d.active ? d.pinned : undefined);
+    if (!file) return;
+    const cached = d.drafts.get(index)?.current;
+    const [left, right] = await Promise.all([
+      cached
+        ? Promise.resolve(cached.left)
+        : repo.readFile(d.session.leftSha, file.oldPath),
+      this.readRight(repo, cached?.right.path || file.newPath),
+    ]);
+    if ((left as Snapshot).reason || right.reason) return;
+    const pair = new DraftPair(
+      { ...left, path: cached?.left.path || file.oldPath },
+      { ...right, path: cached?.right.path || file.newPath },
+    );
+    return this.snapshot(pair);
+  }
+  private async refreshReviewProgress() {
+    const d = this.doc;
+    this.reviewedFiles.clear();
+    if (!d) return;
+    for (let i = 0; i < d.session.files.length; i++) {
+      const key = this.reviewKey(i);
+      if (!this.reviews.hasReviewed(key)) continue;
+      const snapshot = await this.snapshotAt(i);
+      if (d !== this.doc) return;
+      if (
+        snapshot &&
+        this.reviews.matchesFile(key, snapshotFingerprint(snapshot))
+      )
+        this.reviewedFiles.add(i);
+    }
+  }
+  private reviewView(pair: DraftPair): ReviewView {
+    const view = this.reviews.inspect(
+      this.reviewKey(this.doc!.active),
+      this.snapshot(pair),
+    );
+    if (this.doc!.active < this.doc!.session.files.length) {
+      if (view.reviewed) this.reviewedFiles.add(this.doc!.active);
+      else this.reviewedFiles.delete(this.doc!.active);
+    }
+    return {
+      ...view,
+      filesReviewed: this.reviewedFiles.size,
+      totalFiles: this.doc!.session.files.length,
+    };
+  }
+  private async candidateTests() {
+    const repo = this.repository;
+    if (!repo) return [];
+    if (
+      this.testCache?.root === repo.root &&
+      Date.now() - this.testCache.at < 5000
+    )
+      return this.testCache.files;
+    const pattern = "**/{*.test,*.spec}.{ts,tsx,js,jsx,mjs,cjs}";
+    const directories =
+      "**/{__tests__,tests,test}/**/*.{ts,tsx,js,jsx,mjs,cjs}";
+    const exclude =
+      "**/{node_modules,.git,dist,out,build,coverage,.test-host}/**";
+    const found = [
+      ...(await vscode.workspace.findFiles(
+        new vscode.RelativePattern(repo.root, pattern),
+        exclude,
+        200,
+      )),
+      ...(await vscode.workspace.findFiles(
+        new vscode.RelativePattern(repo.root, directories),
+        exclude,
+        200,
+      )),
+    ];
+    const files: { path: string; text: string }[] = [],
+      seen = new Set<string>();
+    let budget = 2 * 1024 * 1024;
+    for (const uri of found) {
+      const relative = path
+        .relative(repo.root, uri.fsPath)
+        .split(path.sep)
+        .join("/");
+      if (seen.has(relative) || files.length >= 200 || budget <= 0) continue;
+      seen.add(relative);
+      try {
+        const safe = await safeApplyPath(repo.root, relative);
+        const stat = await vscode.workspace.fs.stat(vscode.Uri.file(safe));
+        if (stat.size > Math.min(128 * 1024, budget)) continue;
+        const snapshot = await this.readRight(repo, relative);
+        if (snapshot.reason || !snapshot.exists) continue;
+        budget -= Buffer.byteLength(snapshot.text, "utf8");
+        files.push({ path: relative, text: snapshot.text });
+      } catch {
+        /* Unsafe or disappearing test candidates are not opened. */
+      }
+    }
+    this.testCache = { root: repo.root, at: Date.now(), files };
+    return files;
+  }
+  private async workflowState(
+    pair: DraftPair,
+  ): Promise<{ review: ReviewView; staging: StagingView; impact: ImpactView }> {
+    const snapshot = this.snapshot(pair);
+    const [staging, candidates] = await Promise.all([
+      readStagingState(
+        this.doc!.session.root,
+        snapshot.right.path,
+        snapshot.right,
+      ),
+      this.candidateTests(),
+    ]);
+    staging.bufferUnsaved = staging.bufferUnsaved || this.rightUnsaved(pair);
+    const impact = analyzeImpact(
+      snapshot.right.path,
+      snapshot.left.text,
+      snapshot.right.text,
+      snapshot.hunks,
+      candidates,
+    );
+    this.relatedTests = new Set(impact.tests.map((test) => test.path));
+    return { review: this.reviewView(pair), staging, impact };
+  }
+  private scheduleWorkflow() {
+    clearTimeout(this.workflowTimer);
+    this.workflowTimer = setTimeout(
+      () => void this.enqueue(() => this.showFile()),
+      350,
+    );
+  }
   private updateCounts(pair: DraftPair) {
     const f =
       this.doc && (this.doc.session.files[this.doc.active] || this.doc.pinned);
@@ -688,12 +940,24 @@ class BranchLens implements vscode.Disposable {
         unsupported:
           "No changed files. Working-tree and unsaved changes will appear here when you edit a file.",
         highlight: this.settings.highlight,
+        focusMode: this.settings.focusMode,
+        ignoreWhitespace: this.settings.ignoreWhitespace,
       });
       return;
     }
     const pair = result instanceof DraftPair ? result : undefined;
     const contents = pair?.current || (result as any);
     if (!contents) return;
+    const workflow = pair ? await this.workflowState(pair) : undefined;
+    if (
+      generation !== this.fileGeneration ||
+      d !== this.doc ||
+      index !== d.active ||
+      panel !== this.panel
+    )
+      return;
+    const pendingNavigation = this.pendingNavigation;
+    this.pendingNavigation = undefined;
     await panel.webview.postMessage({
       type: "file",
       sessionId: session.id,
@@ -723,6 +987,10 @@ class BranchLens implements vscode.Disposable {
       dirty: pair?.dirty(),
       unsupported: (result as any)?.unsupported,
       highlight: this.settings.highlight,
+      focusMode: this.settings.focusMode,
+      ignoreWhitespace: this.settings.ignoreWhitespace,
+      pendingNavigation,
+      ...workflow,
     });
     this.updateSidebar();
   }
@@ -740,6 +1008,7 @@ class BranchLens implements vscode.Disposable {
   private async syncDocument(document: vscode.TextDocument) {
     const relative = this.relative(document.uri);
     if (relative === undefined || !this.doc || this.writing) return;
+    this.testCache = undefined;
     let found = false;
     for (const [index, pair] of this.doc.drafts) {
       if (pair.current.right.path !== relative) continue;
@@ -846,6 +1115,7 @@ class BranchLens implements vscode.Disposable {
     )
       return;
     if (m.action === "edit") {
+      const review = this.reviewView(pair);
       await this.panel?.webview.postMessage({
         type: "edited",
         sessionId: d.session.id,
@@ -855,12 +1125,332 @@ class BranchLens implements vscode.Disposable {
         dirty: pair.dirty(),
         leftDirty: pair.dirty("left"),
         rightUnsaved: this.rightUnsaved(pair),
+        review,
+        staging: {
+          token: "",
+          staged: [],
+          unstaged: [],
+          bufferUnsaved: this.rightUnsaved(pair),
+          error: "Updating index changes…",
+        },
+        impact: analyzeImpact(
+          pair.current.right.path,
+          pair.current.left.text,
+          pair.current.right.text,
+          pair.hunks(),
+          this.testCache?.files || [],
+        ),
       });
+      this.updateSidebar();
+      this.scheduleWorkflow();
       return;
     }
     await this.showFile();
   }
+  private async workflowAction(action: Action, value?: any) {
+    if (action === "filter") {
+      this.settings.filter = value;
+      if (this.repository)
+        await this.context.workspaceState.update(
+          "repo:" + this.repository.root,
+          this.settings,
+        );
+      return;
+    }
+    if (action === "focusMode" || action === "ignoreWhitespace") {
+      this.settings[action] =
+        typeof value === "boolean" ? value : !this.settings[action];
+      await this.persist();
+      await this.showFile();
+      return;
+    }
+    if (["savePreset", "loadPreset", "deletePreset"].includes(action)) {
+      if (!this.repository)
+        throw new Error("Choose a repository before managing presets.");
+      if (action === "savePreset") {
+        const name =
+          typeof value === "string"
+            ? value
+            : await vscode.window.showInputBox({
+                title: "Save comparison preset",
+                prompt:
+                  "Name for this repository's reference, display options and path filter",
+                validateInput: (text) =>
+                  !text.trim() || text.length > 80
+                    ? "Enter 1–80 characters."
+                    : undefined,
+              });
+        if (!name) return;
+        this.presets.save(name, { ...this.settings });
+      } else {
+        const list = this.presets.list();
+        const id =
+          typeof value === "string"
+            ? value
+            : (
+                await vscode.window.showQuickPick(
+                  list.map((p) => ({
+                    label: p.name,
+                    description: p.left,
+                    id: p.id,
+                  })),
+                  {
+                    title:
+                      action === "loadPreset"
+                        ? "Load comparison preset"
+                        : "Delete comparison preset",
+                  },
+                )
+              )?.id;
+        if (!id) return;
+        const preset = list.find((p) => p.id === id || p.name === id);
+        if (!preset) throw new Error("This preset no longer exists.");
+        if (action === "deletePreset") this.presets.remove(preset.id);
+        else {
+          const before = { ...this.settings };
+          const { id: _id, name: _name, ...settings } = preset;
+          this.settings = { ...this.settings, ...settings };
+          try {
+            if (!(await this.compare())) {
+              this.settings = before;
+              await this.persist();
+              return;
+            }
+          } catch (error) {
+            this.settings = before;
+            await this.persist();
+            throw error;
+          }
+          await this.persist();
+        }
+      }
+      await this.context.workspaceState.update(
+        "presets:" + this.repository.root,
+        this.presets.serialize(),
+      );
+      this.updateSidebar();
+      return;
+    }
+    if (!this.doc || !this.repository)
+      throw new Error("Open a comparison before using review tools.");
+    await this.loadReviewScope();
+    if (action === "exportReview") {
+      const d = this.doc;
+      const files: { path: string; review: ReviewView }[] = [];
+      const included = new Set<string>();
+      for (let i = 0; i < d.session.files.length; i++) {
+        const snapshot = await this.snapshotAt(i);
+        if (snapshot) {
+          const key = this.reviewKey(i);
+          included.add(key);
+          files.push({
+            path: d.session.files[i].newPath,
+            review: this.reviews.inspect(key, snapshot),
+          });
+        }
+      }
+      const archivedNotes = this.reviews
+        .storedNotes()
+        .filter((entry) => !included.has(entry.key))
+        .map((entry) => {
+          let filename = entry.key;
+          try {
+            const paths = JSON.parse(entry.key);
+            if (Array.isArray(paths) && typeof paths[1] === "string")
+              filename = paths[1];
+          } catch {
+            /* Retain legacy note identities as plain report text. */
+          }
+          return { path: filename, notes: entry.notes };
+        });
+      const report = exportReviewMarkdown({
+        reference: d.session.leftRef,
+        current: d.session.rightRef,
+        files,
+        archivedNotes,
+      });
+      const document = await vscode.workspace.openTextDocument({
+        content: report,
+        language: "markdown",
+      });
+      await vscode.window.showTextDocument(document, { preview: false });
+      return;
+    }
+    if (action === "nextUnreviewed") {
+      await this.refreshReviewProgress();
+      const d = this.doc;
+      const active = await this.pair();
+      if (active instanceof DraftPair) {
+        const reviewed = this.reviewView(active);
+        const hunk = active
+          .hunks()
+          .findIndex((_, index) => !reviewed.reviewedHunks.includes(index));
+        if (hunk >= 0) {
+          this.pendingNavigation = { hunk };
+          await this.showFile();
+          return;
+        }
+      }
+      const count = d.session.files.length;
+      for (let offset = 1; offset <= count; offset++) {
+        const index = (Math.min(d.active, count - 1) + offset) % count;
+        if (this.reviewedFiles.has(index)) continue;
+        d.active = index;
+        d.pinned = undefined;
+        this.pendingNavigation = { hunk: 0 };
+        this.ensurePanel();
+        await this.showFile();
+        return;
+      }
+      await vscode.window.showInformationMessage(
+        "All current changed files have been reviewed.",
+      );
+      return;
+    }
+    if (action === "openRelatedTest") {
+      const selected =
+        typeof value === "string"
+          ? value
+          : await vscode.window.showQuickPick([...this.relatedTests], {
+              title: "Candidate related tests",
+            });
+      if (!selected) return;
+      if (!this.relatedTests.has(selected))
+        throw new Error(
+          "Refresh the impact list before opening this test candidate.",
+        );
+      const safe = await safeApplyPath(this.repository.root, selected);
+      await vscode.window.showTextDocument(vscode.Uri.file(safe), {
+        preview: true,
+      });
+      return;
+    }
+    const pair = await this.pair();
+    if (!(pair instanceof DraftPair))
+      throw new Error(
+        "Review and staging tools require supported text content.",
+      );
+    const key = this.reviewKey(this.doc.active),
+      snapshot = this.snapshot(pair);
+    if (action === "reviewFile")
+      this.reviews.markFile(
+        key,
+        snapshot,
+        typeof value === "boolean"
+          ? value
+          : !this.reviews.inspect(key, snapshot).reviewed,
+      );
+    else if (action === "reviewHunk")
+      this.reviews.markHunk(key, snapshot, value.index, value.reviewed);
+    else if (action === "addNote") {
+      const note = value || {
+        text: await vscode.window.showInputBox({
+          title: "Add local file review note",
+          prompt: "1–4000 characters; notes stay local to this workspace",
+          validateInput: (text) =>
+            !text.trim() || text.length > 4000
+              ? "Enter 1–4000 characters."
+              : undefined,
+        }),
+      };
+      if (!note.text) return;
+      this.reviews.addNote(key, snapshot, note.text, note.hunk);
+    } else if (action === "deleteNote") {
+      const id =
+        value ||
+        (
+          await vscode.window.showQuickPick(
+            this.reviews
+              .inspect(key, snapshot)
+              .notes.map((note) => ({
+                label: note.text.slice(0, 100),
+                id: note.id,
+              })),
+            { title: "Delete local review note" },
+          )
+        )?.id;
+      if (id) this.reviews.deleteNote(key, id);
+    } else if (action === "stageHunk" || action === "unstageHunk") {
+      let selection = value;
+      if (!selection) {
+        const staging = await readStagingState(
+          this.repository.root,
+          snapshot.right.path,
+          snapshot.right,
+        );
+        if (staging.error) throw new Error(staging.error);
+        const sections =
+          action === "stageHunk" ? staging.unstaged : staging.staged;
+        const chosen = await vscode.window.showQuickPick(
+          sections.map((section) => ({
+            label: section.summary,
+            index: section.index,
+          })),
+          {
+            title:
+              action === "stageHunk"
+                ? "Stage index change section"
+                : "Unstage index change section",
+          },
+        );
+        if (!chosen) return;
+        selection = { index: chosen.index, token: staging.token };
+      }
+      const expected = snapshot.right;
+      await applyStagingHunk(
+        this.repository.root,
+        expected.path,
+        action === "stageHunk" ? "stage" : "unstage",
+        selection.index,
+        selection.token,
+        expected,
+        async () => {
+          const actual = await this.readRight(this.repository!, expected.path);
+          if (
+            actual.reason ||
+            !this.sameContent(expected, { ...actual, path: expected.path })
+          )
+            throw new Error(
+              "The live working buffer changed during staging. Refresh and select the section again.",
+            );
+        },
+      );
+      await this.compare(true);
+      return;
+    }
+    await this.persistReview();
+    this.reviewView(pair);
+    this.updateSidebar();
+    await this.showFile();
+  }
   private async action(action: Action, value?: any) {
+    if (action === "reviewHunk" && value === undefined) {
+      this.ensurePanel();
+      await this.panel?.webview.postMessage({ type: "command", action });
+      return;
+    }
+    if (
+      [
+        "reviewFile",
+        "reviewHunk",
+        "nextUnreviewed",
+        "addNote",
+        "deleteNote",
+        "exportReview",
+        "focusMode",
+        "ignoreWhitespace",
+        "filter",
+        "savePreset",
+        "loadPreset",
+        "deletePreset",
+        "stageHunk",
+        "unstageHunk",
+        "openRelatedTest",
+      ].includes(action)
+    ) {
+      await this.workflowAction(action, value);
+      return;
+    }
     if (action === "focusFiles") {
       await vscode.commands.executeCommand("branchlens.files.focus");
       return;
@@ -1069,6 +1659,7 @@ class BranchLens implements vscode.Disposable {
     }
   }
   private gitChanged() {
+    this.testCache = undefined;
     clearTimeout(this.gitTimer);
     this.gitTimer = setTimeout(
       () =>
@@ -1092,6 +1683,7 @@ class BranchLens implements vscode.Disposable {
   dispose() {
     clearTimeout(this.gitTimer);
     clearTimeout(this.recoveryTimer);
+    clearTimeout(this.workflowTimer);
     void this.persistSession();
     this.disposables.forEach((d) => d.dispose());
   }
