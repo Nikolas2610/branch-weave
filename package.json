@@ -1,0 +1,267 @@
+{
+  "name": "branch-lens",
+  "displayName": "BranchLens",
+  "description": "Compare Git branches and transfer lines and hunks into safe editable drafts.",
+  "version": "0.2.0",
+  "publisher": "branchlens",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src webview tests",
+    "test": "tsx --test tests/*.test.ts",
+    "package": "npm run build && vsce package --no-dependencies --no-rewrite-relative-links --allow-missing-repository",
+    "test:host": "node scripts/smoke-host.mjs"
+  },
+  "dependencies": {
+    "diff": "^8.0.2",
+    "monaco-editor": "^0.57.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.95.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.6.0",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.0.0"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "branchlens",
+          "title": "BranchLens",
+          "icon": "media/branchlens.svg"
+        }
+      ]
+    },
+    "views": {
+      "branchlens": [
+        {
+          "id": "branchlens.compare",
+          "name": "Compare Branches",
+          "type": "webview"
+        },
+        {
+          "id": "branchlens.files",
+          "name": "Changed Files",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "branchlens.repository",
+        "title": "BranchLens: Select Repository"
+      },
+      {
+        "command": "branchlens.left",
+        "title": "BranchLens: Select Left Branch"
+      },
+      {
+        "command": "branchlens.compare",
+        "title": "BranchLens: Compare Branches"
+      },
+      {
+        "command": "branchlens.refresh",
+        "title": "BranchLens: Refresh Comparison"
+      },
+      {
+        "command": "branchlens.upstream",
+        "title": "BranchLens: Toggle Upstream Comparison"
+      },
+      {
+        "command": "branchlens.highlight",
+        "title": "BranchLens: Toggle Changed-Line Highlighting"
+      },
+      {
+        "command": "branchlens.flat",
+        "title": "BranchLens: Toggle Flat List"
+      },
+      {
+        "command": "branchlens.open",
+        "title": "BranchLens: Open Changed File"
+      },
+      {
+        "command": "branchlens.nextFile",
+        "title": "BranchLens: Next Changed File"
+      },
+      {
+        "command": "branchlens.previousFile",
+        "title": "BranchLens: Previous Changed File"
+      },
+      {
+        "command": "branchlens.nextHunk",
+        "title": "BranchLens: Next Change Section"
+      },
+      {
+        "command": "branchlens.previousHunk",
+        "title": "BranchLens: Previous Change Section"
+      },
+      {
+        "command": "branchlens.focusLeft",
+        "title": "BranchLens: Focus Left Editor"
+      },
+      {
+        "command": "branchlens.focusRight",
+        "title": "BranchLens: Focus Right Editor"
+      },
+      {
+        "command": "branchlens.transferLine",
+        "title": "BranchLens: Transfer Selected Line"
+      },
+      {
+        "command": "branchlens.transferHunk",
+        "title": "BranchLens: Transfer Current Section"
+      },
+      {
+        "command": "branchlens.undo",
+        "title": "BranchLens: Undo Draft Edit"
+      },
+      {
+        "command": "branchlens.redo",
+        "title": "BranchLens: Redo Draft Edit"
+      },
+      {
+        "command": "branchlens.reset",
+        "title": "BranchLens: Reset Side"
+      },
+      {
+        "command": "branchlens.export",
+        "title": "BranchLens: Export Patch"
+      },
+      {
+        "command": "branchlens.apply",
+        "title": "BranchLens: Apply Draft to Working Tree"
+      },
+      {
+        "command": "branchlens.focusFiles",
+        "title": "BranchLens: Focus Changed Files"
+      },
+      {
+        "command": "branchlens.fileOperation",
+        "title": "BranchLens: Draft File Operation"
+      },
+      {
+        "command": "branchlens.save",
+        "title": "BranchLens: Save Current Working File"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "branchlens.nextFile",
+        "key": "alt+shift+pagedown",
+        "when": "branchlens.active"
+      },
+      {
+        "command": "branchlens.previousFile",
+        "key": "alt+shift+pageup",
+        "when": "branchlens.active"
+      },
+      {
+        "command": "branchlens.nextHunk",
+        "key": "alt+shift+down",
+        "when": "branchlens.active"
+      },
+      {
+        "command": "branchlens.previousHunk",
+        "key": "alt+shift+up",
+        "when": "branchlens.active"
+      },
+      {
+        "command": "branchlens.focusFiles",
+        "key": "alt+shift+f",
+        "when": "branchlens.active"
+      },
+      {
+        "command": "branchlens.focusLeft",
+        "key": "alt+shift+1",
+        "when": "branchlens.active"
+      },
+      {
+        "command": "branchlens.focusRight",
+        "key": "alt+shift+2",
+        "when": "branchlens.active"
+      },
+      {
+        "command": "branchlens.upstream",
+        "key": "alt+shift+u",
+        "when": "branchlens.active"
+      },
+      {
+        "command": "branchlens.refresh",
+        "key": "alt+shift+c",
+        "when": "branchlens.active"
+      },
+      {
+        "command": "branchlens.transferLine",
+        "key": "alt+shift+right",
+        "when": "branchlens.active",
+        "args": "left"
+      },
+      {
+        "command": "branchlens.transferLine",
+        "key": "alt+shift+left",
+        "when": "branchlens.active",
+        "args": "right"
+      },
+      {
+        "command": "branchlens.transferHunk",
+        "key": "alt+shift+l",
+        "when": "branchlens.active",
+        "args": "left"
+      },
+      {
+        "command": "branchlens.transferHunk",
+        "key": "alt+shift+r",
+        "when": "branchlens.active",
+        "args": "right"
+      },
+      {
+        "command": "branchlens.save",
+        "key": "ctrl+s",
+        "mac": "cmd+s",
+        "when": "branchlens.active"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "branchlens.refresh",
+          "when": "view == branchlens.files",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "BranchLens requires trusted access to local Git and working-tree files."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "BranchLens needs a local Git working tree."
+    }
+  },
+  "overrides": {
+    "dompurify": "^3.4.17",
+    "@azure/msal-node": "^7.1.1"
+  }
+}

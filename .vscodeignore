@@ -1,0 +1,14 @@
+node_modules/**
+src/**
+webview/**
+tests/**
+scripts/**
+out/**
+.test-host/**
+.superpowers/**
+docs/superpowers/**
+dist/host-test*
+tsconfig.json
+eslint.config.mjs
+package-lock.json
+*.vsix
