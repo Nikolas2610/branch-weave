@@ -1,6 +1,6 @@
 {
   "name": "branch-lens",
-  "displayName": "BranchLens",
+  "displayName": "BranchWeave",
   "description": "Compare a reference branch with your current working files, review changes, and copy lines or sections in VS Code.",
   "version": "0.2.0",
   "publisher": "Nikolas2610",
@@ -49,7 +49,7 @@
       "activitybar": [
         {
           "id": "branchlens",
-          "title": "BranchLens",
+          "title": "BranchWeave",
           "icon": "media/branchlens.svg"
         }
       ]
@@ -71,99 +71,99 @@
     "commands": [
       {
         "command": "branchlens.repository",
-        "title": "BranchLens: Select Repository"
+        "title": "BranchWeave: Select Repository"
       },
       {
         "command": "branchlens.left",
-        "title": "BranchLens: Select Left Branch"
+        "title": "BranchWeave: Select Left Branch"
       },
       {
         "command": "branchlens.compare",
-        "title": "BranchLens: Compare Branches"
+        "title": "BranchWeave: Compare Branches"
       },
       {
         "command": "branchlens.refresh",
-        "title": "BranchLens: Refresh Comparison"
+        "title": "BranchWeave: Refresh Comparison"
       },
       {
         "command": "branchlens.upstream",
-        "title": "BranchLens: Toggle Upstream Comparison"
+        "title": "BranchWeave: Toggle Upstream Comparison"
       },
       {
         "command": "branchlens.highlight",
-        "title": "BranchLens: Toggle Changed-Line Highlighting"
+        "title": "BranchWeave: Toggle Changed-Line Highlighting"
       },
       {
         "command": "branchlens.flat",
-        "title": "BranchLens: Toggle Flat List"
+        "title": "BranchWeave: Toggle Flat List"
       },
       {
         "command": "branchlens.open",
-        "title": "BranchLens: Open Changed File"
+        "title": "BranchWeave: Open Changed File"
       },
       {
         "command": "branchlens.nextFile",
-        "title": "BranchLens: Next Changed File"
+        "title": "BranchWeave: Next Changed File"
       },
       {
         "command": "branchlens.previousFile",
-        "title": "BranchLens: Previous Changed File"
+        "title": "BranchWeave: Previous Changed File"
       },
       {
         "command": "branchlens.nextHunk",
-        "title": "BranchLens: Next Change Section"
+        "title": "BranchWeave: Next Change Section"
       },
       {
         "command": "branchlens.previousHunk",
-        "title": "BranchLens: Previous Change Section"
+        "title": "BranchWeave: Previous Change Section"
       },
       {
         "command": "branchlens.focusLeft",
-        "title": "BranchLens: Focus Left Editor"
+        "title": "BranchWeave: Focus Left Editor"
       },
       {
         "command": "branchlens.focusRight",
-        "title": "BranchLens: Focus Right Editor"
+        "title": "BranchWeave: Focus Right Editor"
       },
       {
         "command": "branchlens.transferLine",
-        "title": "BranchLens: Transfer Selected Line"
+        "title": "BranchWeave: Transfer Selected Line"
       },
       {
         "command": "branchlens.transferHunk",
-        "title": "BranchLens: Transfer Current Section"
+        "title": "BranchWeave: Transfer Current Section"
       },
       {
         "command": "branchlens.undo",
-        "title": "BranchLens: Undo Draft Edit"
+        "title": "BranchWeave: Undo Draft Edit"
       },
       {
         "command": "branchlens.redo",
-        "title": "BranchLens: Redo Draft Edit"
+        "title": "BranchWeave: Redo Draft Edit"
       },
       {
         "command": "branchlens.reset",
-        "title": "BranchLens: Reset Side"
+        "title": "BranchWeave: Reset Side"
       },
       {
         "command": "branchlens.export",
-        "title": "BranchLens: Export Patch"
+        "title": "BranchWeave: Export Patch"
       },
       {
         "command": "branchlens.apply",
-        "title": "BranchLens: Apply Draft to Working Tree"
+        "title": "BranchWeave: Apply Draft to Working Tree"
       },
       {
         "command": "branchlens.focusFiles",
-        "title": "BranchLens: Focus Changed Files"
+        "title": "BranchWeave: Focus Changed Files"
       },
       {
         "command": "branchlens.fileOperation",
-        "title": "BranchLens: Draft File Operation"
+        "title": "BranchWeave: Draft File Operation"
       },
       {
         "command": "branchlens.save",
-        "title": "BranchLens: Save Current Working File"
+        "title": "BranchWeave: Save Current Working File"
       }
     ],
     "keybindings": [
@@ -256,11 +256,11 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
-      "description": "BranchLens requires trusted access to local Git and working-tree files."
+      "description": "BranchWeave requires trusted access to local Git and working-tree files."
     },
     "virtualWorkspaces": {
       "supported": false,
-      "description": "BranchLens needs a local Git working tree."
+      "description": "BranchWeave needs a local Git working tree."
     }
   },
   "overrides": {

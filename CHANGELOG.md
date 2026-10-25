@@ -2,6 +2,7 @@
 
 ## 0.2.0
 
+- Publish as **BranchWeave**; internal command IDs and the `branch-lens` package identity remain compatible with development builds.
 - Compare a selected reference with the checked-out branch, including staged, unstaged, new and unsaved changes.
 - Edit actual working-file buffers on the right; Save writes the current file to disk.
 - Use a reusable comparison panel with automatic preview recovery.

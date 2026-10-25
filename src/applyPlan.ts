@@ -130,14 +130,14 @@ export async function buildApplyPlan(
     throw new Error('Applying a file-mode change is unsupported; preserve the original mode.');
   }
   if (!original.exists && draft.exists && draft.mode === '100755') {
-    throw new Error('Creating an executable file requires an explicit permission change outside BranchLens.');
+    throw new Error('Creating an executable file requires an explicit permission change outside BranchWeave.');
   }
   const source = await safeApplyPath(root, original.path);
   const destination = await safeApplyPath(root, draft.path);
   // Case-only renames are ambiguous on case-insensitive filesystems. Refuse rather
   // than silently treating an existing destination as safe to overwrite.
   if (source !== destination && process.platform === 'win32' && source.toLowerCase() === destination.toLowerCase()) {
-    throw new Error('Case-only renames require an explicit filesystem rename outside BranchLens.');
+    throw new Error('Case-only renames require an explicit filesystem rename outside BranchWeave.');
   }
   const actual = await diskContent(source, original.path);
   const buffer = options.readBuffer?.(source);
