@@ -1,4 +1,4 @@
-# Develop BranchLens
+# Develop BranchWeave
 
 The [README](../README.md) is the user guide displayed with the extension. This guide covers running and checking the source project.
 
@@ -6,8 +6,8 @@ The [README](../README.md) is the user guide displayed with the extension. This 
 
 1. Open the `branch-lens` source folder in VS Code.
 2. Run `npm ci` in the integrated terminal.
-3. Press **F5** and choose **Run BranchLens**. The launch configuration builds the extension and opens an Extension Development Host.
-4. Open a trusted local Git repository in that new window and select BranchLens in the Activity Bar.
+3. Press **F5** and choose **Run BranchWeave**. The launch configuration builds the extension and opens an Extension Development Host.
+4. Open a trusted local Git repository in that new window and select BranchWeave in the Activity Bar.
 
 The extension source folder itself does not need to be a Git repository. Branch comparison needs a Git repository open in the Extension Development Host.
 

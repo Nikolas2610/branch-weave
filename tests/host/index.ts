@@ -19,7 +19,7 @@ const anyPanel = () =>
   tabs().find(
     (t) =>
       t.input instanceof vscode.TabInputWebview &&
-      t.label.startsWith("BranchLens"),
+      t.label.startsWith("BranchWeave"),
   );
 async function execute(command: string, ...args: unknown[]) {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -108,7 +108,7 @@ export async function run() {
       "activate extension and register contributed commands",
       async () => {
         const extension = vscode.extensions.getExtension(
-          "branchlens.branch-lens",
+          "Nikolas2610.branch-lens",
         );
         assert.ok(extension);
         await extension.activate();
@@ -151,7 +151,7 @@ export async function run() {
         await execute("branchlens.compare.focus");
         await execute("branchlens.files.focus");
         await execute("branchlens.compare");
-        await waitFor(() => !!anyPanel(), "BranchLens panel");
+        await waitFor(() => !!anyPanel(), "BranchWeave panel");
         assert.ok(anyPanel()!.input instanceof vscode.TabInputWebview);
         assert.equal(anyPanel()!.isDirty, false);
         assert.equal(

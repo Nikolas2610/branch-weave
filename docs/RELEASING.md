@@ -1,11 +1,12 @@
-# Release BranchLens
+# Release BranchWeave
 
-BranchLens follows the Git Timekeeper GitHub Actions release flow: test a merged PR, publish an exact VSIX, then synchronize automatic version bumps through another PR.
+BranchWeave follows the Git Timekeeper GitHub Actions release flow: test a merged PR, publish an exact VSIX, then synchronize automatic version bumps through another PR.
 
 ## Repository configuration
 
 | Setting | Value |
 | --- | --- |
+| Marketplace display name | `BranchWeave` |
 | Extension ID | `Nikolas2610.branch-lens` |
 | Actions variable `MARKETPLACE_PUBLISHER` | `Nikolas2610` |
 | Actions variable `MARKETPLACE_AUTH` | `pat` for the current setup; `oidc` after configuring trusted publishing |

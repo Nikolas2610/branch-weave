@@ -50,7 +50,7 @@ async function chooseTarget(repository: GitRepository, session: ComparisonSessio
   const selected = await vscode.window.showQuickPick(choices, {
     title: mergeBase ? 'A merge-base snapshot has no writable branch. Choose an explicit target.' :
       branch?.remote ? `Choose a local checkout for remote branch ${ref}` : `Apply ${ref} draft to a local checkout`,
-    placeHolder: 'BranchLens never switches your current checkout or stashes changes',
+    placeHolder: 'BranchWeave never switches your current checkout or stashes changes',
     ignoreFocusOut: true,
   });
   if (!selected) return undefined;
@@ -111,7 +111,7 @@ export async function applyDraft(repository: GitRepository, session: ComparisonS
     }
     const confirmation = await vscode.window.showWarningMessage(
       `Apply ${side} draft to ${target.branch}?`,
-      { modal: true, detail: `${target.root}\n${plan.kind === 'rename' ? `${original.path} → ${draft.path}` : draft.exists ? draft.path : original.path}\n\n${plan.kind === 'edit' ? 'Text changes remain unsaved and support editor undo.' : 'File creation, deletion or renaming affects this worktree immediately. Text changes remain unsaved and support editor undo.'}\nBranchLens does not save, stash, switch branches, or commit.` },
+      { modal: true, detail: `${target.root}\n${plan.kind === 'rename' ? `${original.path} → ${draft.path}` : draft.exists ? draft.path : original.path}\n\n${plan.kind === 'edit' ? 'Text changes remain unsaved and support editor undo.' : 'File creation, deletion or renaming affects this worktree immediately. Text changes remain unsaved and support editor undo.'}\nBranchWeave does not save, stash, switch branches, or commit.` },
       'Apply draft',
     );
     if (confirmation !== 'Apply draft') return;

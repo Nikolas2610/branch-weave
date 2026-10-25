@@ -1,12 +1,12 @@
-# BranchLens
+# BranchWeave
 
 **Compare your branch. Review each change. Keep editing.**
 
-BranchLens brings branch comparison into VS Code. Choose a reference branch, see what changed in your current checkout, and copy individual lines or complete change sections into your working files. Your staged, unstaged, new, and unsaved changes are included.
+BranchWeave brings branch comparison into VS Code. Choose a reference branch, see what changed in your current checkout, and copy individual lines or complete change sections into your working files. Your staged, unstaged, new, and unsaved changes are included.
 
-![Side-by-side branch comparison with rounded change sections and icon tools](docs/evidence/working-islands-desktop.png)
+![Side-by-side branch comparison with rounded change sections and icon tools](docs/evidence/branchweave-comparison.jpg)
 
-## Why BranchLens?
+## Why BranchWeave?
 
 - **Review your work in context.** Browse changed files in a folder tree or flat list, filter by path, and jump between changes.
 - **See changes clearly.** Rounded section highlights and inline word differences make edits easy to follow.
@@ -16,10 +16,10 @@ BranchLens brings branch comparison into VS Code. Choose a reference branch, see
 
 ## Get started
 
-Once BranchLens is installed:
+Once BranchWeave is installed:
 
 1. Open a trusted folder containing your Git repository in VS Code.
-2. Select **BranchLens** in the Activity Bar.
+2. Select **BranchWeave** in the Activity Bar.
 3. Choose your **Repository** if more than one is available.
 4. Choose a **Reference branch** to compare against, such as `development` or `main`.
 5. Click **Compare**, then select a file under **Changed Files**.
@@ -28,9 +28,9 @@ The **Current branch** on the right is the branch already checked out in your re
 
 For example, if you are working on `feature/login`, choose `development` as the reference to review your feature changes alongside edits you have not committed or saved yet.
 
-![Comparison controls with a reference branch selector, current branch, and highlighting options](docs/evidence/working-islands-compare-600.png)
+![Comparison controls with a reference branch selector, current branch, and highlighting options](docs/evidence/branchweave-controls.jpg)
 
-*Screenshots show the BranchLens interface with sample repository data.*
+*Screenshots show the BranchWeave interface with sample repository data.*
 
 ## Understand the two sides
 
@@ -51,7 +51,7 @@ The comparison opens as a reusable panel. You do not need to name or save a comp
 4. Choose the direction: **Left to Right** updates your working file; **Right to Left** updates the reference preview.
 5. Review the result and save the working file when ready.
 
-Copying replaces the matching destination content and keeps the source. If a line cannot be matched unambiguously, BranchLens asks you to copy the whole section instead. A complete added or deleted section can also create or remove a file.
+Copying replaces the matching destination content and keeps the source. If a line cannot be matched unambiguously, BranchWeave asks you to copy the whole section instead. A complete added or deleted section can also create or remove a file.
 
 **Undo** and **Redo** let you revisit comparison edits. **Reset** restores the chosen side to its content when the file was opened in the comparison, after confirmation. Hover or keyboard-focus any toolbar icon for its description and available shortcut; press Escape to dismiss the tooltip.
 
@@ -63,7 +63,7 @@ Use **Highlight change sections** to show or hide the rounded section background
 
 The **Working file unsaved** label means the current file has pending text changes. Click the Save icon or press Ctrl+S / Cmd+S to save that file. Saving does not commit your changes.
 
-![Working-file edits with the Working file unsaved status](docs/evidence/working-islands-unsaved.png)
+![Working-file edits with the Working file unsaved status](docs/evidence/branchweave-unsaved.jpg)
 
 ## Choose what to compare
 
@@ -74,19 +74,19 @@ The **Working file unsaved** label means the current file has pending text chang
 | **Off** | The common ancestor of the reference and your current branch → your working files. | Review changes on your branch since it diverged, including your local edits. |
 | **On** | The latest locally available reference commit → your working files. | See all differences from the reference, including changes made only on that reference. |
 
-BranchLens uses local branches and locally available remote-tracking references. It does not fetch automatically. To compare against newer remote changes, fetch using your usual Git tools, then **Refresh** the comparison.
+BranchWeave uses local branches and locally available remote-tracking references. It does not fetch automatically. To compare against newer remote changes, fetch using your usual Git tools, then **Refresh** the comparison.
 
 ## Export or apply a reference preview
 
 Use **Export patch** to save edits from either side as a Git-compatible patch, relative to that side's opening content.
 
-If you edit the left preview and want those edits in another checkout, use **Apply reference draft** and explicitly choose a local branch/worktree. A worktree is a separate folder checked out to a branch. BranchLens checks the destination before applying and asks you to resolve conflicting content. Save text changes in that destination when ready.
+If you edit the left preview and want those edits in another checkout, use **Apply reference draft** and explicitly choose a local branch/worktree. A worktree is a separate folder checked out to a branch. BranchWeave checks the destination before applying and asks you to resolve conflicting content. Save text changes in that destination when ready.
 
-Reference preview drafts are recovered automatically for the workspace and current branch. If changing the comparison would replace a modified preview, BranchLens asks first.
+Reference preview drafts are recovered automatically for the workspace and current branch. If changing the comparison would replace a modified preview, BranchWeave asks first.
 
 ## Keyboard shortcuts
 
-These defaults apply while the BranchLens comparison panel is active. You can change them in VS Code's **Keyboard Shortcuts** editor by searching for `BranchLens`.
+These defaults apply while the BranchWeave comparison panel is active. You can change them in VS Code's **Keyboard Shortcuts** editor by searching for `BranchWeave`.
 
 | Action | Shortcut |
 | --- | --- |
@@ -117,7 +117,7 @@ Open its folder in VS Code, or add it as a workspace folder. Automatic discovery
 
 **Why is my remote branch missing or out of date?**
 
-Fetch it with your usual Git tools, then Refresh. BranchLens only uses references and Git objects already available locally.
+Fetch it with your usual Git tools, then Refresh. BranchWeave only uses references and Git objects already available locally.
 
 **Why are there no changed files?**
 
@@ -129,15 +129,15 @@ Choose **Use direct comparison** to compare the reference tip with your working 
 
 **What if a file changes elsewhere while I am editing?**
 
-BranchLens checks the expected content before applying edits. If it detects a conflict, it shows a reconciliation diff. Saving also uses VS Code's normal handling of external file changes.
+BranchWeave checks the expected content before applying edits. If it detects a conflict, it shows a reconciliation diff. Saving also uses VS Code's normal handling of external file changes.
 
-**Does BranchLens switch branches or change Git history?**
+**Does BranchWeave switch branches or change Git history?**
 
 No. It does not automatically check out, stash, commit, push, reset Git, or rewrite references. Creating a worktree requires an explicit choice.
 
 **Do I need an account or online service?**
 
-No. BranchLens runs locally, with no account, backend, telemetry, or runtime dependency downloads.
+No. BranchWeave runs locally, with no account, backend, telemetry, or runtime dependency downloads.
 
 ## License
 

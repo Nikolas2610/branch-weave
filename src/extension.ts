@@ -234,7 +234,7 @@ class BranchLens implements vscode.Disposable {
       type: "error",
       message: this.error,
     });
-    void vscode.window.showErrorMessage("BranchLens: " + this.error);
+    void vscode.window.showErrorMessage("BranchWeave: " + this.error);
   }
   private async discover() {
     if (!vscode.workspace.isTrusted) {
@@ -364,7 +364,7 @@ class BranchLens implements vscode.Disposable {
     this.panel = panel;
     this.panelReady = false;
     panel.title =
-      "BranchLens · " + (this.doc?.session.rightRef || "Current branch");
+      "BranchWeave · " + (this.doc?.session.rightRef || "Current branch");
     panel.iconPath = vscode.Uri.joinPath(
       this.context.extensionUri,
       "media",
@@ -414,7 +414,7 @@ class BranchLens implements vscode.Disposable {
     if (!this.panel) {
       const panel = vscode.window.createWebviewPanel(
         "branchlens.diff",
-        "BranchLens",
+        "BranchWeave",
         vscode.ViewColumn.Active,
         {
           enableScripts: true,
@@ -503,7 +503,7 @@ class BranchLens implements vscode.Disposable {
       await this.persistSession();
       if (!automatic) this.ensurePanel();
       if (this.panel) {
-        this.panel.title = "BranchLens · " + session.rightRef;
+        this.panel.title = "BranchWeave · " + session.rightRef;
         await this.showFile();
       }
       return true;
@@ -884,7 +884,7 @@ class BranchLens implements vscode.Disposable {
     if (action === "repository") {
       const selected = await vscode.window.showQuickPick(
         this.repositories.map((r) => ({ label: r.root, repo: r })),
-        { title: "BranchLens repository" },
+        { title: "BranchWeave repository" },
       );
       if (
         selected &&
