@@ -1,0 +1,221 @@
+name: Publish Extension
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Marketplace to publish to (requires its registered publisher and token)
+        type: choice
+        required: true
+        options:
+          - vscode
+          - open-vsx
+      version:
+        description: Exact package.json version to publish
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  release-context:
+    name: Check merged release source
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      skip: ${{ steps.context.outputs.skip }}
+    env:
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Checkout the exact CI source commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify merged PR and prevent version synchronization loops
+        id: context
+        run: node scripts/release.cjs context
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  automatic-vscode:
+    name: Publish merged changes to Visual Studio Marketplace
+    needs: release-context
+    if: needs.release-context.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    # Sync-only merges are filtered before joining the publication queue.
+    # GitHub may coalesce pending application runs during a burst of merges.
+    concurrency:
+      group: marketplace-publish
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+      id-token: write
+    env:
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      MARKETPLACE_PUBLISHER: ${{ vars.MARKETPLACE_PUBLISHER }}
+      MARKETPLACE_AUTH: ${{ vars.MARKETPLACE_AUTH || 'oidc' }}
+      RELEASE_VERSION: auto
+    steps:
+      - name: Checkout the exact CI source commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Restore the original release plan on reruns
+        if: github.run_attempt > 1
+        uses: actions/download-artifact@v4
+        with:
+          name: marketplace-release-plan-${{ github.run_id }}
+          path: output/release
+
+      - name: Select version and prepare or verify the exact VSIX
+        run: node scripts/release.cjs prepare
+
+      - name: Persist release plan before any publication
+        if: github.run_attempt == 1
+        uses: actions/upload-artifact@v4
+        with:
+          name: marketplace-release-plan-${{ github.run_id }}
+          path: |
+            output/release/plan.json
+            output/release/branch-lens.vsix
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Publish or recover the same release
+        id: publication
+        run: node scripts/release.cjs publish
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Synchronize repository versions through a PR
+        if: steps.publication.outputs.published == 'true'
+        run: node scripts/release.cjs sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  publish:
+    name: Publish to ${{ inputs.target }}
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: marketplace-publish
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Require main branch
+        env:
+          SELECTED_REF: ${{ github.ref }}
+        run: |
+          test "$SELECTED_REF" = "refs/heads/main" || (echo "Select the main branch when dispatching this workflow." && exit 1)
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate marketplace metadata
+        env:
+          MARKETPLACE_PUBLISHER: ${{ vars.MARKETPLACE_PUBLISHER }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          node <<'NODE'
+          const pkg = require('./package.json');
+          if (pkg.private) throw new Error('package.json must not be private for marketplace publishing.');
+          if (!pkg.publisher || pkg.publisher === 'local-dev') throw new Error('Set a registered publisher in package.json.');
+          if (!process.env.MARKETPLACE_PUBLISHER || pkg.publisher !== process.env.MARKETPLACE_PUBLISHER) {
+            throw new Error('Set the MARKETPLACE_PUBLISHER repository variable to the registered publisher ID matching package.json.');
+          }
+          if (pkg.version !== process.env.RELEASE_VERSION) throw new Error('The requested version must match package.json exactly.');
+          NODE
+
+      - name: Validate Visual Studio Marketplace token
+        if: inputs.target == 'vscode'
+        run: |
+          test "$MARKETPLACE_AUTH" = oidc || test -n "$VSCE_PAT" || (echo "Missing GitHub Actions secret: VSCE_PAT" && exit 1)
+        env:
+          MARKETPLACE_AUTH: ${{ vars.MARKETPLACE_AUTH || 'oidc' }}
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Validate Open VSX token
+        if: inputs.target == 'open-vsx'
+        run: |
+          test -n "$OVSX_PAT" || (echo "Missing GitHub Actions secret: OVSX_PAT" && exit 1)
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+      - name: Run tests
+        run: npm test
+
+      - name: Package extension
+        run: npm run package
+
+      - name: Publish to Visual Studio Marketplace
+        if: inputs.target == 'vscode'
+        run: |
+          if [ "$MARKETPLACE_AUTH" = oidc ]; then
+            env -u VSCE_PAT npm exec --no -- vsce publish --packagePath branch-lens.vsix --oidc
+          elif [ "$MARKETPLACE_AUTH" = pat ]; then
+            npm exec --no -- vsce publish --packagePath branch-lens.vsix
+          else
+            echo 'MARKETPLACE_AUTH must be oidc or pat.'
+            exit 1
+          fi
+        env:
+          MARKETPLACE_AUTH: ${{ vars.MARKETPLACE_AUTH || 'oidc' }}
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Publish to Open VSX
+        if: inputs.target == 'open-vsx'
+        run: npm exec --no -- ovsx publish branch-lens.vsix -p "$OVSX_PAT"
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}

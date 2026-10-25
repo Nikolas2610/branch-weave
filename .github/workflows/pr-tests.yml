@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - development
+  push:
+    branches:
+      - main
+      - development
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test and package (${{ matrix.os }}, Node 22)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+      - name: Package extension
+        run: npm run package
+
+      - name: Upload installable VSIX
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: branch-lens-vsix
+          path: branch-lens.vsix
+          if-no-files-found: error

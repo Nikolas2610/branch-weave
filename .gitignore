@@ -4,3 +4,4 @@ out/
 *.vsix
 .test-host/
 .superpowers/
+output/
