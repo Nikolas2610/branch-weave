@@ -132,7 +132,7 @@ test('path traversal, Git metadata, Windows drive paths and alternate streams ar
   for (const unsafe of ['../escape', 'a/../../escape', '/absolute', 'C:/absolute', '\\\\server\\share', 'folder\\file', '.git/config', 'folder/.GIT/config', '.git./config', '.git /config', 'a:stream', 'a//b', './file']) {
     await assert.rejects(safeApplyPath(root, unsafe), /Unsafe|escapes/);
   }
-  assert.equal(await safeApplyPath(root, 'new/nested/file.txt'), path.join(root, 'new', 'nested', 'file.txt'));
+  assert.equal(await safeApplyPath(root, 'new/nested/file.txt'), path.join(await fs.realpath(root), 'new', 'nested', 'file.txt'));
 });
 
 test('binary and invalid UTF-8 working files are refused without lossy decoding', async t => {
