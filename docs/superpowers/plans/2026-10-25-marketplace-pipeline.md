@@ -34,4 +34,10 @@ Adapt the user's existing Git Timekeeper GitHub Actions publishing flow to Branc
 
 ## External state
 
-`MARKETPLACE_PUBLISHER=Nikolas2610` and `MARKETPLACE_AUTH=pat` were configured. GitHub API still returned zero repository secrets after the user's initial confirmation, so the exact repository/secret was clarified. Changing `can_approve_pull_request_reviews` was rejected by automatic approval review because the API combines necessary PR creation with broader review-approval permission; no permission change occurred. Explicit owner approval is required for that setting. Neither issue affects local validation or creating the implementation PR.
+`MARKETPLACE_PUBLISHER=Nikolas2610` and `MARKETPLACE_AUTH=pat` were configured. GitHub API still returned zero repository secrets after the user's initial confirmation, so the exact repository/secret was clarified. The user subsequently asked what the value should contain and received official Azure DevOps PAT instructions. No token was requested in chat.
+
+Changing `can_approve_pull_request_reviews` was initially rejected by automatic approval review because GitHub combines necessary PR creation with broader review-approval permission. The owner then explicitly approved that combined setting, and the API confirmed it enabled while defaults remain read-only.
+
+## CI findings
+
+The first remote Ubuntu run passed. Windows reported three test expectation failures because its temporary path uses the DOS alias `RUNNER~1`, while the checked paths use the canonical `runneradmin` directory. Expectations now canonicalize existing roots with `realpath`; product path safety and test coverage remain unchanged. The original failing CI run supplies the regression reproduction.

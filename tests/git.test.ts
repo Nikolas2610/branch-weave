@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, rm, rename, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, rename, symlink, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test, type TestContext } from 'node:test';
@@ -221,7 +221,8 @@ test('lists local and remote branches and safely discovers opened and nested rep
   await mkdir(nested, { recursive: true });
   await git(nested, ['init', '--initial-branch=main']);
   const discovered = await GitRepository.discover([root, path.join(root, 'shared.txt'), nested]);
-  assert.deepEqual(new Set(discovered.map((r) => path.resolve(r.root).toLowerCase())), new Set([root, nested].map((p) => path.resolve(p).toLowerCase())));
+  const expectedRoots = await Promise.all([root, nested].map((p) => realpath(p)));
+  assert.deepEqual(new Set(discovered.map((r) => path.resolve(r.root).toLowerCase())), new Set(expectedRoots.map((p) => path.resolve(p).toLowerCase())));
 });
 
 test('only creates a worktree on explicit request and discovers the opened worktree', async (t) => {
@@ -230,14 +231,15 @@ test('only creates a worktree on explicit request and discovers the opened workt
   const repo = new GitRepository(root);
   assert.equal((await repo.worktrees()).length, 1);
   await repo.createWorktree('main', destination, 'draft-testing');
+  const canonicalDestination = await realpath(destination);
   const worktrees = await repo.worktrees();
   assert.equal(worktrees.length, 2);
-  const linked = worktrees.find((w) => path.resolve(w.path).toLowerCase() === path.resolve(destination).toLowerCase());
+  const linked = worktrees.find((w) => path.resolve(w.path).toLowerCase() === path.resolve(canonicalDestination).toLowerCase());
   assert.equal(linked?.branch, 'draft-testing');
   assert.match(linked?.head ?? '', /^[0-9a-f]{40,64}$/);
   assert.equal(await new GitRepository(destination).currentBranch(), 'draft-testing');
   const discovered = await GitRepository.discover([destination]);
-  assert.ok(discovered.some((r) => path.resolve(r.root).toLowerCase() === path.resolve(destination).toLowerCase()));
+  assert.ok(discovered.some((r) => path.resolve(r.root).toLowerCase() === path.resolve(canonicalDestination).toLowerCase()));
   assert.equal(await repo.currentBranch(), 'main');
 });
 
