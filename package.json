@@ -2,7 +2,7 @@
   "name": "branch-lens",
   "displayName": "BranchWeave",
   "description": "Compare a reference branch with your current working files, review changes, and copy lines or sections in VS Code.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "Nikolas2610",
   "license": "MIT",
   "engines": {
