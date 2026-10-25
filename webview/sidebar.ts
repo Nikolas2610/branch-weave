@@ -4,6 +4,9 @@ const root = document.getElementById("sidebar")!;
 const kind = document.body.dataset.view;
 let state: any = { repos: [], settings: {}, files: [] };
 let filter = "";
+let filterTimer: ReturnType<typeof setTimeout> | undefined;
+let presetName = "";
+let presetsOpen = false;
 const send = (action: string, value?: unknown) =>
   api.postMessage({ type: "action", action, value });
 function element(tag: string, text?: string, cls?: string): HTMLElement {
@@ -34,7 +37,66 @@ function toggle(label: string, checked: boolean, action: string) {
   f.append(c, document.createTextNode(label));
   return f;
 }
+function presetPanel() {
+  const panel = document.createElement("details");
+  panel.className = "preset-panel";
+  panel.open = presetsOpen;
+  panel.ontoggle = () => {
+    presetsOpen = panel.open;
+  };
+  panel.append(
+    element("summary", "Comparison presets"),
+    element(
+      "p",
+      "Save the reference, comparison and display settings, and path filter. Loading preserves the current checkout.",
+      "description",
+    ),
+  );
+  const form = document.createElement("form");
+  form.className = "preset-form";
+  const name = document.createElement("input");
+  name.type = "text";
+  name.placeholder = "Preset name";
+  name.maxLength = 120;
+  name.setAttribute("aria-label", "Comparison preset name");
+  name.value = presetName;
+  const save = button("Save preset", "savePreset");
+  save.type = "submit";
+  save.onclick = null;
+  save.disabled = !presetName.trim() || !state.root;
+  name.oninput = () => {
+    presetName = name.value;
+    save.disabled = !presetName.trim() || !state.root;
+  };
+  form.onsubmit = (event) => {
+    event.preventDefault();
+    if (!presetName.trim()) return;
+    send("savePreset", presetName.trim());
+    presetName = "";
+    name.value = "";
+    save.disabled = true;
+  };
+  form.append(name, save);
+  panel.append(form);
+  for (const preset of state.presets || []) {
+    const row = element("div", undefined, "preset-row");
+    const load = button(preset.name, "loadPreset", preset.id, "selector");
+    load.title = `Load ${preset.name} · ${preset.left}`;
+    const remove = button("Delete", "deletePreset", preset.id);
+    remove.setAttribute("aria-label", `Delete preset ${preset.name}`);
+    row.append(load, remove);
+    panel.append(row);
+  }
+  if (!state.presets?.length)
+    panel.append(element("p", "No saved presets.", "description"));
+  return panel;
+}
 function render() {
+  const active = document.activeElement as HTMLInputElement | null;
+  const restoreFilter = active?.id === "path-filter";
+  const selection = restoreFilter
+    ? [active.selectionStart, active.selectionEnd]
+    : undefined;
   root.replaceChildren();
   if (kind === "compare") {
     root.append(
@@ -85,6 +147,15 @@ function render() {
       ),
     );
     root.append(
+      toggle("Focus changed regions", !!state.settings.focusMode, "focusMode"),
+      toggle(
+        "Ignore trim whitespace in editor",
+        !!state.settings.ignoreWhitespace,
+        "ignoreWhitespace",
+      ),
+      presetPanel(),
+    );
+    root.append(
       element(
         "p",
         "Choose a local reference branch. Right always follows the checked-out branch; selecting a reference never checks out or fetches.",
@@ -103,19 +174,48 @@ function render() {
       ),
     );
     root.append(row);
+    if (state.reviewProgress) {
+      const review = element("div", undefined, "review-sidebar");
+      const progress = document.createElement("progress");
+      progress.max = Math.max(1, state.reviewProgress.total);
+      progress.value = state.reviewProgress.reviewed;
+      progress.setAttribute("aria-label", "Reviewed files");
+      review.append(
+        element(
+          "span",
+          `${state.reviewProgress.reviewed}/${state.reviewProgress.total} files reviewed`,
+        ),
+        progress,
+        button("Next unreviewed", "nextUnreviewed"),
+      );
+      root.append(review);
+    }
     const input = document.createElement("input");
     input.type = "text";
+    input.id = "path-filter";
     input.placeholder = "Filter file paths";
     input.setAttribute("aria-label", "Filter changed file paths");
     input.value = filter;
     input.oninput = () => {
       filter = input.value;
       renderFiles(list);
+      clearTimeout(filterTimer);
+      filterTimer = setTimeout(() => {
+        filterTimer = undefined;
+        send("filter", filter);
+      }, 250);
     };
     root.append(input);
     const list = element("div");
     root.append(list);
     renderFiles(list);
+    if (restoreFilter) {
+      input.focus();
+      input.setSelectionRange(
+        selection?.[0] ?? input.value.length,
+        selection?.[1] ?? input.value.length,
+      );
+    }
   }
   if (state.loading)
     root.append(element("p", "Comparing snapshots…", "description"));
@@ -170,7 +270,11 @@ function renderFiles(list: HTMLElement) {
       f.index,
       "file-row" + (state.active === f.index ? " selected" : ""),
     );
-    b.setAttribute("aria-label", `${f.status} ${f.newPath}`);
+    const reviewed = state.reviewedFiles?.includes(f.index);
+    b.setAttribute(
+      "aria-label",
+      `${f.status} ${f.newPath}${reviewed ? ", reviewed" : ", unreviewed"}`,
+    );
     b.setAttribute("aria-current", state.active === f.index ? "true" : "false");
     b.title = `${f.status === "R" ? f.oldPath + " → " : ""}${f.newPath}`;
     b.append(
@@ -182,6 +286,12 @@ function renderFiles(list: HTMLElement) {
         "file-name",
       ),
     );
+    if (reviewed) {
+      const indicator = element("span", "✓", "reviewed-indicator");
+      indicator.title = "Reviewed";
+      indicator.setAttribute("aria-hidden", "true");
+      b.append(indicator);
+    }
     if (f.additions !== null) {
       const counts = element("span", undefined, "counts");
       counts.append(
@@ -199,6 +309,8 @@ function renderFiles(list: HTMLElement) {
 window.addEventListener("message", (e) => {
   if (e.data.type === "state") {
     state = e.data;
+    if (typeof state.settings?.filter === "string" && !filterTimer)
+      filter = state.settings.filter;
     render();
   }
 });

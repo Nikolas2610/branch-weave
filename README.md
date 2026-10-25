@@ -4,7 +4,7 @@
 
 BranchWeave brings branch comparison into VS Code. Choose a reference branch, see what changed in your current checkout, and copy individual lines or complete change sections into your working files. Your staged, unstaged, new, and unsaved changes are included.
 
-![Side-by-side branch comparison with rounded change sections and icon tools](docs/evidence/branchweave-comparison.jpg)
+![BranchWeave comparison with review progress, notes and section tools](docs/evidence/workflow-desktop-review.png)
 
 ## Why BranchWeave?
 
@@ -13,6 +13,9 @@ BranchWeave brings branch comparison into VS Code. Choose a reference branch, se
 - **Move only what you need.** Copy a changed line or a whole section in either direction.
 - **Keep working in the comparison.** Edit your current file on the right, then save it with Ctrl+S on Windows/Linux or Cmd+S on macOS.
 - **Find tools without a crowded toolbar.** Hover over an icon or focus it with the keyboard to see what it does.
+- **Finish a review.** Track reviewed files and sections, keep local notes, and export a Markdown report.
+- **Prepare a focused commit.** Stage or unstage individual Git index sections without saving or replacing your working file.
+- **Return to your workflow.** Save comparison presets, collapse unchanged context, and inspect changed functions with candidate tests.
 
 ## Get started
 
@@ -76,6 +79,45 @@ The **Working file unsaved** label means the current file has pending text chang
 
 BranchWeave uses local branches and locally available remote-tracking references. It does not fetch automatically. To compare against newer remote changes, fetch using your usual Git tools, then **Refresh** the comparison.
 
+## Review progress and notes
+
+Use the review icon to mark the current file reviewed. Open **Review & notes** to review an individual section, add a note to the file or current section, and delete notes. **Next unreviewed change** moves to a section or file that still needs attention. The toolbar and changed-file list show progress.
+
+Review completion belongs to the exact file content: editing either side clears the file's completion. Section marks can remain for unchanged, unambiguous sections. Notes stay stored when their section changes, with an **anchor changed** label so you can reassess them.
+
+**Export Markdown** opens a report in the normal VS Code editor. Save or share it when ready. The report includes progress and notes, including saved notes for files no longer in the changed-file list. Notes and review progress are local to the workspace, repository, reference, current branch and comparison mode; they are not uploaded.
+
+## Stage or unstage a section
+
+Open **Git index changes**. This panel has its own sections:
+
+| List | What it compares | Action |
+| --- | --- | --- |
+| **Unstaged** | The index with the current working-file buffer | **Stage** adds just that section to the next commit. |
+| **Staged** | The current HEAD with the index | **Unstage** removes just that section from the next commit. |
+
+Expand a section to inspect its preview before acting. Staging can include unsaved editor text and does not save or alter the working file. Unrelated staged changes are preserved. If the index, branch, HEAD, saved file or live buffer changes during the operation, refresh and select the section again.
+
+The index panel is independent of the reference comparison. A committed branch change can appear in the main editors while having no unstaged index sections. Staging supports the same text-file limits as editing; permission changes should be managed with your usual Git tools.
+
+## Focus mode and whitespace
+
+**Focus changed regions** collapses long unchanged regions while keeping surrounding context. Expand a collapsed region to read more, or toggle focus off to show the whole file.
+
+**Ignore trim whitespace** hides differences caused only by leading or trailing spaces and tabs. Section positions, copying, review anchors and staging retain the exact content mapping. If the current section is hidden by this setting, the position label explains why.
+
+## Save comparison presets
+
+In **Compare Branches**, give the current setup a name and choose **Save preset**. A preset stores the reference branch, upstream mode, highlighting, tree/list layout, focus mode, whitespace option and path filter. Load it to restore those settings, or delete it when no longer needed.
+
+Presets belong to the selected repository. Loading one keeps the currently checked-out branch and uses the normal confirmation before replacing modified reference previews.
+
+## Inspect changed code and candidate tests
+
+Open **Changed symbols & tests** to group JavaScript and TypeScript changes by function, class, method or arrow function. Select a symbol to jump to its location. Deleted symbols point to the reference editor. Other languages, top-level changes and files outside the analysis limits use a file/section fallback.
+
+Candidate tests are suggested from matching filenames or parsed relative imports, including files in conventional `test`, `tests` and `__tests__` folders. Select a candidate to open it in the normal VS Code editor. These are suggestions, not a complete dependency analysis; BranchWeave does not run tests automatically.
+
 ## Export or apply a reference preview
 
 Use **Export patch** to save edits from either side as a Git-compatible patch, relative to that side's opening content.
@@ -106,6 +148,8 @@ These defaults apply while the BranchWeave comparison panel is active. You can c
 - **VS Code 1.95 or newer**, with Git installed and available on your system PATH.
 - A **trusted workspace** with a local Git working tree. Virtual workspaces are not supported.
 - **UTF-8 text files up to 2 MiB per side**, using consistent LF or CRLF line endings. Files without a final newline are supported.
+- Changed-symbol parsing supports JS/TS source up to 512 KiB. Candidate test inspection is bounded to 200 files / 2 MiB and ignores dependency/build folders.
+- Review storage holds up to 500 file records and 100 notes per file; a note is at most 4,000 characters. Named presets are limited to 30 per repository. Limits produce an explicit message rather than silently discarding notes.
 
 Binary files, Git LFS pointers, symlinks, submodules, invalid UTF-8, mixed line endings, and oversized files display an unsupported-file message. Permission changes and case-only renames on Windows are not supported. The comparison editor provides syntax highlighting; full language-server features from the normal VS Code editor are not available inside it.
 

@@ -70,3 +70,50 @@ test("live file identity survives changed-file list reordering without accepting
   assert.equal(matchesDraftTarget(m, "live", 0, 4, "b.ts"), false);
   assert.equal(matchesDraftTarget(m, "next", 2, 4, "a.ts"), false);
 });
+test("workflow actions validate section tokens, notes, presets and safe related-test paths", () => {
+  const action = (name: string, value?: unknown) => ({
+    type: "action",
+    action: name,
+    value,
+  });
+  assert.equal(validateMessage(action("reviewFile", true)), true);
+  assert.equal(
+    validateMessage(action("reviewHunk", { index: 1, reviewed: false })),
+    true,
+  );
+  assert.equal(
+    validateMessage(action("reviewHunk", { index: -1, reviewed: true })),
+    false,
+  );
+  assert.equal(
+    validateMessage(action("stageHunk", { index: 0, token: "a".repeat(64) })),
+    true,
+  );
+  assert.equal(
+    validateMessage(action("stageHunk", { index: 0, token: "stale" })),
+    false,
+  );
+  assert.equal(
+    validateMessage(action("addNote", { text: "Check this", hunk: 0 })),
+    true,
+  );
+  assert.equal(
+    validateMessage(action("addNote", { text: "x".repeat(4001) })),
+    false,
+  );
+  assert.equal(validateMessage(action("savePreset", "Frontend review")), true);
+  assert.equal(validateMessage(action("filter", "src/")), true);
+  assert.equal(
+    validateMessage(action("openRelatedTest", "tests/a.test.ts")),
+    true,
+  );
+  for (const path of [
+    "../secret",
+    "/absolute",
+    "C:/absolute",
+    "tests\\file",
+    ".git/config",
+    "a:stream",
+  ])
+    assert.equal(validateMessage(action("openRelatedTest", path)), false);
+});

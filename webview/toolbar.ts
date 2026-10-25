@@ -1,7 +1,17 @@
-import { Codicon } from "monaco-editor/base/common/codicons.js";
+import { Codicon as BundledCodicon } from "monaco-editor/base/common/codicons.js";
 import "./toolbar.css";
 
+// The local Monaco declaration lists the original toolbar subset only.
+const Codicon = BundledCodicon as typeof BundledCodicon &
+  Readonly<
+    Record<"checklist" | "fold" | "whitespace", { readonly id: string }>
+  >;
+
 const icons = {
+  review: [Codicon.check],
+  nextUnreviewed: [Codicon.checklist, Codicon.arrowRight],
+  focus: [Codicon.fold],
+  whitespace: [Codicon.whitespace],
   previousFile: [Codicon.goToFile, Codicon.arrowLeft],
   nextFile: [Codicon.goToFile, Codicon.arrowRight],
   previousHunk: [Codicon.arrowUp],

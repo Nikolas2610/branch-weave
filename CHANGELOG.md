@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+- Add persistent file/section review progress and next-unreviewed navigation.
+- Add local file/section notes, stale-anchor labels and Markdown reports retaining notes outside the current changed-file list.
+- Stage and unstage actual Git index sections with snapshot/lock guards, preserving working files and unrelated staged changes.
+- Add focus mode and trim-whitespace presentation controls while retaining exact transfer mappings.
+- Save, load and delete repository comparison presets, including path filters and display settings.
+- Group changed JS/TS symbols and suggest candidate related tests with safe editor navigation.
+- Prevent duplicate Monaco content events from desynchronizing edit acknowledgements.
+
 ## 0.2.0
 
 - Publish as **BranchWeave**; internal command IDs and the `branch-lens` package identity remain compatible with development builds.

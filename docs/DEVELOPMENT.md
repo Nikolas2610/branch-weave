@@ -4,7 +4,7 @@ The [README](../README.md) is the user guide displayed with the extension. This 
 
 ## Run from source
 
-1. Open the `branch-lens` source folder in VS Code.
+1. Open the source checkout or feature worktree in VS Code.
 2. Run `npm ci` in the integrated terminal.
 3. Press **F5** and choose **Run BranchWeave**. The launch configuration builds the extension and opens an Extension Development Host.
 4. Open a trusted local Git repository in that new window and select BranchWeave in the Activity Bar.
@@ -28,6 +28,7 @@ npm run package
 
 ## Verification evidence
 
+- [Review workflow browser verification](workflow-browser-verification.md): rendered checks of the six workflow features and error states. Staging in that harness is simulated; real index behavior is covered by Git fixture and native host tests.
 - [Current working-tree browser verification](current-working-tree-browser.md): rendered webview criteria, screenshots, and harness limitations.
 - [Delivery report](DELIVERY.md): release verification, native host checks, and remaining interactive checks.
 - [Original browser verification](browser-verification.md) and [host verification](host-verification.md): earlier implementation evidence.
